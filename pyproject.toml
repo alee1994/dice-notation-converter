@@ -1,0 +1,15 @@
+[project]
+name = "diceconv"
+version = "0.1.0"
+description = "Convert dice notation between compact text and structured JSON"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [{name = "alee1994"}]
+
+[project.scripts]
+diceconv = "diceconv.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
