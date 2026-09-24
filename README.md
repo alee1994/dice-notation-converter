@@ -58,9 +58,15 @@ starts with `{`, notation otherwise) and converts to the other one.
 - Any number of dice groups and flat modifiers joined with `+` or `-`,
   e.g. `4d8-1d4+2`.
 - Omitted dice count means one die: `d20` is the same as `1d20`.
+- Keep-highest/lowest selectors: `4d6kh3` keeps the highest 3 of 4 dice,
+  `4d6kl1` keeps the lowest 1. The dice term carries `keep_mode`
+  (`"highest"`/`"lowest"`) and `keep_count` in JSON.
+- Advantage and disadvantage as shorthand for a two-die keep-one roll:
+  `d20adv` and `d20dis` are equivalent to `2d20kh1` and `2d20kl1`. Converting
+  back to notation always produces the `kh`/`kl` form, since that's what the
+  JSON actually stores.
 
-Advantage/disadvantage, exploding dice, and keep-highest/lowest selectors
-aren't handled yet.
+Exploding dice aren't handled yet.
 
 ## Install
 

@@ -6,10 +6,16 @@ json.dumps/json.loads without needing a custom encoder.
 
 import re
 from dataclasses import dataclass
-from typing import List, Union
+from typing import List, Optional, Union
 
-# A dice term looks like '2d6' or 'd20' (count defaults to 1 when omitted).
-_DICE_RE = re.compile(r"(?P<count>\d*)d(?P<sides>\d+)", re.IGNORECASE)
+# A dice term looks like '2d6' or 'd20' (count defaults to 1 when omitted),
+# optionally followed by a keep selector: 'kh'/'kl' plus a count (e.g.
+# '4d6kh3'), or the 'adv'/'dis' shorthand for a two-die keep-one roll.
+_DICE_RE = re.compile(
+    r"(?P<count>\d*)d(?P<sides>\d+)"
+    r"(?:(?P<keep_mode>k[hl])(?P<keep_count>\d+)|(?P<advdis>adv|dis))?",
+    re.IGNORECASE,
+)
 # Split 'a+b-c' into ['+a', '+b', '-c'] by looking ahead for a sign, after a
 # leading sign has been forced onto the first term in parse_notation().
 _SPLIT_RE = re.compile(r"(?=[+-])")
@@ -20,6 +26,10 @@ class DiceTerm:
     count: int
     sides: int
     sign: int = 1
+    # keep_mode is "h" (keep highest) or "l" (keep lowest); None means keep
+    # every die. keep_count is how many dice to keep when keep_mode is set.
+    keep_mode: Optional[str] = None
+    keep_count: Optional[int] = None
 
 
 @dataclass
@@ -52,11 +62,41 @@ def parse_notation(text: str) -> List[Term]:
 
         dice_match = _DICE_RE.fullmatch(body)
         if dice_match:
+            has_count = bool(dice_match.group("count"))
             count = int(dice_match.group("count") or "1")
             sides = int(dice_match.group("sides"))
             if count < 1 or sides < 1:
                 raise NotationError(f"dice term must use positive numbers: {chunk!r}")
-            terms.append(DiceTerm(count=count, sides=sides, sign=sign))
+
+            keep_mode = None
+            keep_count = None
+            advdis = dice_match.group("advdis")
+            if advdis:
+                # Advantage/disadvantage always means "roll two, keep one".
+                if has_count and count != 2:
+                    raise NotationError(
+                        f"advantage/disadvantage rolls exactly two dice: {chunk!r}"
+                    )
+                count = 2
+                keep_mode = "h" if advdis.lower() == "adv" else "l"
+                keep_count = 1
+            elif dice_match.group("keep_mode"):
+                keep_mode = dice_match.group("keep_mode")[1].lower()
+                keep_count = int(dice_match.group("keep_count"))
+                if keep_count < 1 or keep_count > count:
+                    raise NotationError(
+                        f"keep count must be between 1 and the dice count: {chunk!r}"
+                    )
+
+            terms.append(
+                DiceTerm(
+                    count=count,
+                    sides=sides,
+                    sign=sign,
+                    keep_mode=keep_mode,
+                    keep_count=keep_count,
+                )
+            )
         elif body.isdigit():
             terms.append(ModifierTerm(value=int(body), sign=sign))
         else:
@@ -74,7 +114,8 @@ def format_notation(terms: List[Term]) -> str:
         sign = "-" if term.sign < 0 else ("+" if index else "")
         if isinstance(term, DiceTerm):
             count = "" if term.count == 1 else str(term.count)
-            pieces.append(f"{sign}{count}d{term.sides}")
+            keep = f"k{term.keep_mode}{term.keep_count}" if term.keep_mode else ""
+            pieces.append(f"{sign}{count}d{term.sides}{keep}")
         else:
             pieces.append(f"{sign}{term.value}")
     return "".join(pieces)
@@ -84,9 +125,11 @@ def spec_to_dict(terms: List[Term]) -> dict:
     out_terms = []
     for term in terms:
         if isinstance(term, DiceTerm):
-            out_terms.append(
-                {"type": "dice", "count": term.count, "sides": term.sides, "sign": term.sign}
-            )
+            entry = {"type": "dice", "count": term.count, "sides": term.sides, "sign": term.sign}
+            if term.keep_mode:
+                entry["keep_mode"] = "highest" if term.keep_mode == "h" else "lowest"
+                entry["keep_count"] = term.keep_count
+            out_terms.append(entry)
         else:
             out_terms.append({"type": "modifier", "value": term.value, "sign": term.sign})
     return {"terms": out_terms}
@@ -103,7 +146,28 @@ def spec_from_dict(data: dict) -> List[Term]:
         sign = raw.get("sign", 1)
         term_type = raw.get("type")
         if term_type == "dice":
-            terms.append(DiceTerm(count=raw["count"], sides=raw["sides"], sign=sign))
+            keep_mode_name = raw.get("keep_mode")
+            keep_mode = None
+            keep_count = None
+            if keep_mode_name is not None:
+                if keep_mode_name not in ("highest", "lowest"):
+                    raise NotationError(f"unknown keep_mode: {keep_mode_name!r}")
+                keep_mode = "h" if keep_mode_name == "highest" else "l"
+                try:
+                    keep_count = raw["keep_count"]
+                except KeyError as exc:
+                    raise NotationError("keep_mode requires a keep_count") from exc
+                if not (1 <= keep_count <= raw["count"]):
+                    raise NotationError("keep_count must be between 1 and count")
+            terms.append(
+                DiceTerm(
+                    count=raw["count"],
+                    sides=raw["sides"],
+                    sign=sign,
+                    keep_mode=keep_mode,
+                    keep_count=keep_count,
+                )
+            )
         elif term_type == "modifier":
             terms.append(ModifierTerm(value=raw["value"], sign=sign))
         else:
