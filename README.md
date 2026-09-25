@@ -65,8 +65,10 @@ starts with `{`, notation otherwise) and converts to the other one.
   `d20adv` and `d20dis` are equivalent to `2d20kh1` and `2d20kl1`. Converting
   back to notation always produces the `kh`/`kl` form, since that's what the
   JSON actually stores.
-
-Exploding dice aren't handled yet.
+- Exploding dice: `2d6!` marks a dice term so that each die rolling its
+  maximum value adds another roll. The `!` goes right after the sides and
+  before any keep selector, e.g. `4d6!kh3`. The dice term carries
+  `"explode": true` in JSON; it's omitted when false.
 
 ## Install
 

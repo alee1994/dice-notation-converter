@@ -9,10 +9,13 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 # A dice term looks like '2d6' or 'd20' (count defaults to 1 when omitted),
-# optionally followed by a keep selector: 'kh'/'kl' plus a count (e.g.
-# '4d6kh3'), or the 'adv'/'dis' shorthand for a two-die keep-one roll.
+# optionally followed by an exploding marker '!' (each die that rolls its
+# maximum value adds another roll), then either a keep selector: 'kh'/'kl'
+# plus a count (e.g. '4d6kh3'), or the 'adv'/'dis' shorthand for a two-die
+# keep-one roll.
 _DICE_RE = re.compile(
     r"(?P<count>\d*)d(?P<sides>\d+)"
+    r"(?P<explode>!)?"
     r"(?:(?P<keep_mode>k[hl])(?P<keep_count>\d+)|(?P<advdis>adv|dis))?",
     re.IGNORECASE,
 )
@@ -30,6 +33,7 @@ class DiceTerm:
     # every die. keep_count is how many dice to keep when keep_mode is set.
     keep_mode: Optional[str] = None
     keep_count: Optional[int] = None
+    explode: bool = False
 
 
 @dataclass
@@ -95,6 +99,7 @@ def parse_notation(text: str) -> List[Term]:
                     sign=sign,
                     keep_mode=keep_mode,
                     keep_count=keep_count,
+                    explode=bool(dice_match.group("explode")),
                 )
             )
         elif body.isdigit():
@@ -114,8 +119,9 @@ def format_notation(terms: List[Term]) -> str:
         sign = "-" if term.sign < 0 else ("+" if index else "")
         if isinstance(term, DiceTerm):
             count = "" if term.count == 1 else str(term.count)
+            explode = "!" if term.explode else ""
             keep = f"k{term.keep_mode}{term.keep_count}" if term.keep_mode else ""
-            pieces.append(f"{sign}{count}d{term.sides}{keep}")
+            pieces.append(f"{sign}{count}d{term.sides}{explode}{keep}")
         else:
             pieces.append(f"{sign}{term.value}")
     return "".join(pieces)
@@ -129,6 +135,8 @@ def spec_to_dict(terms: List[Term]) -> dict:
             if term.keep_mode:
                 entry["keep_mode"] = "highest" if term.keep_mode == "h" else "lowest"
                 entry["keep_count"] = term.keep_count
+            if term.explode:
+                entry["explode"] = True
             out_terms.append(entry)
         else:
             out_terms.append({"type": "modifier", "value": term.value, "sign": term.sign})
@@ -166,6 +174,7 @@ def spec_from_dict(data: dict) -> List[Term]:
                     sign=sign,
                     keep_mode=keep_mode,
                     keep_count=keep_count,
+                    explode=bool(raw.get("explode", False)),
                 )
             )
         elif term_type == "modifier":

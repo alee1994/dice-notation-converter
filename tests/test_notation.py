@@ -124,6 +124,21 @@ class ParseNotationTests(unittest.TestCase):
         with self.assertRaises(NotationError):
             parse_notation("3d20adv")
 
+    def test_exploding_dice(self):
+        terms = parse_notation("2d6!")
+        self.assertEqual(terms, [DiceTerm(count=2, sides=6, sign=1, explode=True)])
+
+    def test_exploding_dice_with_keep(self):
+        terms = parse_notation("4d6!kh3")
+        self.assertEqual(
+            terms,
+            [DiceTerm(count=4, sides=6, sign=1, keep_mode="h", keep_count=3, explode=True)],
+        )
+
+    def test_non_exploding_dice_defaults_false(self):
+        terms = parse_notation("2d6")
+        self.assertEqual(terms, [DiceTerm(count=2, sides=6, sign=1, explode=False)])
+
 
 class FormatNotationTests(unittest.TestCase):
     def test_round_trip(self):
@@ -149,6 +164,14 @@ class FormatNotationTests(unittest.TestCase):
     def test_advantage_formats_as_canonical_keep_highest(self):
         terms = parse_notation("d20adv")
         self.assertEqual(format_notation(terms), "2d20kh1")
+
+    def test_exploding_dice_round_trip(self):
+        text = "2d6!"
+        self.assertEqual(format_notation(parse_notation(text)), text)
+
+    def test_exploding_dice_with_keep_round_trip(self):
+        text = "4d6!kh3"
+        self.assertEqual(format_notation(parse_notation(text)), text)
 
 
 class SpecDictTests(unittest.TestCase):
@@ -223,6 +246,18 @@ class SpecDictTests(unittest.TestCase):
                     ]
                 }
             )
+
+    def test_exploding_dice_round_trip_through_dict(self):
+        terms = parse_notation("2d6!")
+        rebuilt = spec_from_dict(spec_to_dict(terms))
+        self.assertEqual(terms, rebuilt)
+
+    def test_dict_output_omits_explode_when_false(self):
+        terms = parse_notation("2d6")
+        self.assertEqual(
+            spec_to_dict(terms),
+            {"terms": [{"type": "dice", "count": 2, "sides": 6, "sign": 1}]},
+        )
 
 
 if __name__ == "__main__":
