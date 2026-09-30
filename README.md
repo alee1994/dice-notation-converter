@@ -50,6 +50,20 @@ $ cat roll.json | python -m diceconv.cli --from json --to notation
 2d6+3
 ```
 
+Rolling instead of converting (input can be notation or JSON):
+
+```
+$ echo "4d6kh3+2" | python -m diceconv.cli --evaluate
+4d6kh3  [6, 3, 5] dropped [2] = 14
++2
+total: 16
+```
+
+`--seed N` makes the rolls repeatable. Exploding dice add their extra dice
+to the term, and those extras count toward a keep selector. `--evaluate`
+can't be combined with `--to`, and exploding one-sided dice are rejected
+since they would never stop.
+
 With no `--from`/`--to`, the tool guesses the input format (JSON if it
 starts with `{`, notation otherwise) and converts to the other one.
 

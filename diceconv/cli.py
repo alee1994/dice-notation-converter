@@ -2,9 +2,10 @@
 
 import argparse
 import json
+import random
 import sys
 
-from . import notation
+from . import notation, roll
 
 
 def read_input(path):
@@ -46,16 +47,33 @@ def build_parser():
         default=None,
         help="output format (default: the format --from isn't)",
     )
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="roll the dice and print each term's result and the total "
+        "instead of converting",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="seed the random generator, for repeatable rolls with --evaluate",
+    )
     return parser
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.evaluate and args.to_format:
+        parser.error("--evaluate cannot be combined with --to")
+    if args.seed is not None and not args.evaluate:
+        parser.error("--seed only applies with --evaluate")
     text = read_input(args.file)
 
     from_format = args.from_format or detect_format(text)
     to_format = args.to_format or ("json" if from_format == "notation" else "notation")
-    if to_format == from_format:
+    if to_format == from_format and not args.evaluate:
         raise SystemExit("input and output format are the same, nothing to convert")
 
     try:
@@ -66,7 +84,13 @@ def main(argv=None):
     except (notation.NotationError, json.JSONDecodeError) as exc:
         raise SystemExit(f"diceconv: {exc}")
 
-    if to_format == "notation":
+    if args.evaluate:
+        try:
+            result = roll.roll_terms(terms, random.Random(args.seed))
+        except notation.NotationError as exc:
+            raise SystemExit(f"diceconv: {exc}")
+        print(roll.format_result(result))
+    elif to_format == "notation":
         print(notation.format_notation(terms))
     else:
         print(json.dumps(notation.spec_to_dict(terms), indent=2))
